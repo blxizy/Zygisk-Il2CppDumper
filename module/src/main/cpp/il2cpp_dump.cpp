@@ -324,23 +324,36 @@ std::string dump_type(const Il2CppType *type) {
 
 void il2cpp_api_init(void *handle) {
     LOGI("il2cpp_handle: %p", handle);
-    init_il2cpp_api(handle);
-    if (il2cpp_domain_get_assemblies) {
+    init_il2cpp_api(handle); // Загружаем все доступные API[cite: 3]
+
+    if (il2cpp_domain_get_assemblies) { // Проверяем функцию для вычисления базы[cite: 3]
         Dl_info dlInfo;
-        if (dladdr((void *) il2cpp_domain_get_assemblies, &dlInfo)) {
-            il2cpp_base = reinterpret_cast<uint64_t>(dlInfo.dli_fbase);
+        if (dladdr((void *) il2cpp_domain_get_assemblies, &dlInfo)) { // Вычисляем адрес[cite: 3]
+            il2cpp_base = reinterpret_cast<uint64_t>(dlInfo.dli_fbase); // Записываем il2cpp_base[cite: 3]
         }
         LOGI("il2cpp_base: %" PRIx64"", il2cpp_base);
+
+        // --- НАШ ПАТЧ ---
+        // Жестко задаем адрес il2cpp_init, прибавляя твой RVA-оффсет к базовому адресу
+        il2cpp_init = (int (*)(const char *))(il2cpp_base + 0x03235c74);
+        LOGI("Hardcoded il2cpp_init applied: %p", il2cpp_init);
+        // ----------------
+
     } else {
         LOGE("Failed to initialize il2cpp api.");
-        return;
+        return; // Выходим, если базу найти не удалось[cite: 3]
     }
-    while (!il2cpp_is_vm_thread(nullptr)) {
-        LOGI("Waiting for il2cpp_init...");
-        sleep(1);
+
+    // УДАЛЕН БАГОВАННЫЙ ЦИКЛ while (!il2cpp_is_vm_thread(nullptr))[cite: 3]
+    // Вместо этого мы жестко засыпаем на 15 секунд. 
+    // За это время игра 100% успеет загрузить движок и расшифровать метадату.
+    LOGI("Sleeping 15 seconds to bypass stripped VM thread check...");
+    sleep(15);
+
+    auto domain = il2cpp_domain_get(); // Получаем домен[cite: 3]
+    if (domain) {
+        il2cpp_thread_attach(domain); // Прикрепляем наш поток[cite: 3]
     }
-    auto domain = il2cpp_domain_get();
-    il2cpp_thread_attach(domain);
 }
 
 void il2cpp_dump(const char *outDir) {
